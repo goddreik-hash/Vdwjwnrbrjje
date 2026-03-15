@@ -1,0 +1,361 @@
+-- ╔══════════════════════════════════════════════════════╗
+-- ║        COCOA FLOAT FARM - by Script Generator        ║
+-- ║   Para juego uncopylocked - Función AFK Farm         ║
+-- ╚══════════════════════════════════════════════════════╝
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+-- ══════════════════════════════════════
+--           CONFIGURACIÓN
+-- ══════════════════════════════════════
+local CONFIG = {
+    EGG_NAMES = {
+        "Candy Egg",
+        "CandyEgg",
+    },
+    IGNORE_NAMES = {
+        "EasterEgg", "Easter Egg", "EasterEggs", "Easter Eggs",
+        "DecorEgg", "Decor Egg", "DecorationEgg", "Decoration Egg",
+        "EggDecor", "OrnamentEgg", "Ornament", "EggOrnament",
+        "PropEgg", "Egg Prop", "EggProp", "MapEgg", "Map Egg",
+        "EggDeco", "BackgroundEgg", "StaticEgg", "DisplayEgg",
+        "EggDisplay", "EggModel", "EggBase", "EggPedestal",
+        "Chocolate Dipped Eggs", "Striped Candy Eggs",
+    },
+    TELEPORT_DELAY = 0.05,
+    SCAN_INTERVAL = 2,
+    MAX_DISTANCE = 2000,
+    AUTO_RESPAWN_CHECK = 1,
+    STUCK_TIME = 6,
+    STUCK_THRESHOLD = 3,
+}
+
+-- ══════════════════════════════════════
+--         VARIABLES DE ESTADO
+-- ══════════════════════════════════════
+local farmActive = false
+local farmConnection = nil
+local eggCount = 0
+local riverPosition = nil
+local lastPosition = nil
+local lastMoveTime = tick()
+
+-- ══════════════════════════════════════
+--           GUI
+-- ══════════════════════════════════════
+local function createGUI()
+    local oldGui = player.PlayerGui:FindFirstChild("CocoaFloatFarm")
+    if oldGui then oldGui:Destroy() end
+
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "gigifarm minigame"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.DisplayOrder = 999
+    ScreenGui.Parent = player.PlayerGui
+
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Name = "MainFrame"
+    MainFrame.Size = UDim2.new(0, 200, 0, 145)
+    MainFrame.Position = UDim2.new(0, 15, 0.5, -72)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(30, 15, 10)
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Active = true
+    MainFrame.Draggable = true
+    MainFrame.Parent = ScreenGui
+
+    Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+    local Stroke = Instance.new("UIStroke", MainFrame)
+    Stroke.Color = Color3.fromRGB(139, 80, 30)
+    Stroke.Thickness = 2
+
+    local Title = Instance.new("TextLabel", MainFrame)
+    Title.Size = UDim2.new(1, 0, 0, 28)
+    Title.BackgroundColor3 = Color3.fromRGB(139, 69, 19)
+    Title.BorderSizePixel = 0
+    Title.Text = "🍫 Cocoa Float Farm"
+    Title.TextColor3 = Color3.fromRGB(255, 220, 150)
+    Title.TextSize = 13
+    Title.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 10)
+
+    local StatusLabel = Instance.new("TextLabel", MainFrame)
+    StatusLabel.Name = "StatusLabel"
+    StatusLabel.Size = UDim2.new(1, -10, 0, 20)
+    StatusLabel.Position = UDim2.new(0, 5, 0, 32)
+    StatusLabel.BackgroundTransparency = 1
+    StatusLabel.Text = "⬛ Estado: Inactivo"
+    StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+    StatusLabel.TextSize = 11
+    StatusLabel.Font = Enum.Font.Gotham
+    StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    local EggCounter = Instance.new("TextLabel", MainFrame)
+    EggCounter.Name = "EggCounter"
+    EggCounter.Size = UDim2.new(1, -10, 0, 18)
+    EggCounter.Position = UDim2.new(0, 5, 0, 52)
+    EggCounter.BackgroundTransparency = 1
+    EggCounter.Text = "🥚 Huevos: 0"
+    EggCounter.TextColor3 = Color3.fromRGB(255, 200, 80)
+    EggCounter.TextSize = 11
+    EggCounter.Font = Enum.Font.Gotham
+    EggCounter.TextXAlignment = Enum.TextXAlignment.Left
+
+    -- Botón Start Farm (morado por defecto)
+    local StartBtn = Instance.new("TextButton", MainFrame)
+    StartBtn.Name = "StartBtn"
+    StartBtn.Size = UDim2.new(1, -16, 0, 26)
+    StartBtn.Position = UDim2.new(0, 8, 0, 74)
+    StartBtn.BackgroundColor3 = Color3.fromRGB(100, 30, 160)
+    StartBtn.BorderSizePixel = 0
+    StartBtn.Text = "🚀 Start Farm"
+    StartBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    StartBtn.TextSize = 13
+    StartBtn.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", StartBtn).CornerRadius = UDim.new(0, 7)
+    local StartStroke = Instance.new("UIStroke", StartBtn)
+    StartStroke.Color = Color3.fromRGB(180, 80, 255)
+    StartStroke.Thickness = 1
+
+    -- Botón Set Position
+    local SetPosBtn = Instance.new("TextButton", MainFrame)
+    SetPosBtn.Name = "SetPosBtn"
+    SetPosBtn.Size = UDim2.new(1, -16, 0, 26)
+    SetPosBtn.Position = UDim2.new(0, 8, 0, 106)
+    SetPosBtn.BackgroundColor3 = Color3.fromRGB(15, 50, 120)
+    SetPosBtn.BorderSizePixel = 0
+    SetPosBtn.Text = "📍 Set Position"
+    SetPosBtn.TextColor3 = Color3.fromRGB(180, 210, 255)
+    SetPosBtn.TextSize = 12
+    SetPosBtn.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", SetPosBtn).CornerRadius = UDim.new(0, 7)
+    local SetStroke = Instance.new("UIStroke", SetPosBtn)
+    SetStroke.Color = Color3.fromRGB(80, 140, 255)
+    SetStroke.Thickness = 1
+
+    return ScreenGui, StatusLabel, EggCounter, StartBtn, SetPosBtn
+end
+
+-- ══════════════════════════════════════
+--        BUSCAR HUEVOS
+-- ══════════════════════════════════════
+local function findEggs()
+    local eggs = {}
+
+    local function searchIn(parent)
+        for _, obj in ipairs(parent:GetChildren()) do
+            if obj:IsA("BasePart") or obj:IsA("Model") or obj:IsA("Part") then
+                local nameLow = obj.Name:lower()
+
+                local isIgnored = false
+                for _, ignoreName in ipairs(CONFIG.IGNORE_NAMES) do
+                    if nameLow == ignoreName:lower() or nameLow:find(ignoreName:lower(), 1, true) then
+                        isIgnored = true
+                        break
+                    end
+                end
+
+                if not isIgnored then
+                    if nameLow:find("easter") or nameLow:find("decor") or
+                       nameLow:find("ornament") or nameLow:find("prop") or
+                       nameLow:find("static") or nameLow:find("display") or
+                       nameLow:find("pedestal") or nameLow:find("base") or
+                       nameLow:find("chocolate dipped") or nameLow:find("striped candy") then
+                        isIgnored = true
+                    end
+                end
+
+                if not isIgnored then
+                    for _, eggName in ipairs(CONFIG.EGG_NAMES) do
+                        if nameLow:find(eggName:lower(), 1, true) then
+                            local pos
+                            if obj:IsA("Model") and obj.PrimaryPart then
+                                pos = obj.PrimaryPart.Position
+                            elseif obj:IsA("BasePart") then
+                                pos = obj.Position
+                            end
+                            if pos then
+                                local dist = (rootPart.Position - pos).Magnitude
+                                if dist <= CONFIG.MAX_DISTANCE then
+                                    table.insert(eggs, {position = pos, distance = dist})
+                                end
+                            end
+                            break
+                        end
+                    end
+                end
+            end
+
+            if obj:IsA("Folder") or obj:IsA("Model") then
+                searchIn(obj)
+            end
+        end
+    end
+
+    searchIn(game.Workspace)
+    table.sort(eggs, function(a, b) return a.distance < b.distance end)
+    return eggs
+end
+
+-- ══════════════════════════════════════
+--     TELETRANSPORTE
+--     ✅ Y = -1 para ir más abajo
+-- ══════════════════════════════════════
+local function teleportTo(position)
+    character = player.Character
+    if not character then return end
+    rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return end
+    rootPart.CFrame = CFrame.new(position + Vector3.new(0, -1, 0))
+end
+
+-- ══════════════════════════════════════
+--     FARM LOOP
+-- ══════════════════════════════════════
+local function startFarm(statusLabel, eggCounter)
+    if farmConnection then
+        farmConnection:Disconnect()
+        farmConnection = nil
+    end
+
+    local waiting = false
+    lastPosition = nil
+    lastMoveTime = tick()
+
+    farmConnection = RunService.Heartbeat:Connect(function()
+        if not farmActive then return end
+
+        character = player.Character
+        if not character then return end
+        rootPart = character:FindFirstChild("HumanoidRootPart")
+        if not rootPart then return end
+
+        local currentPos = rootPart.Position
+
+        if lastPosition then
+            local moved = (currentPos - lastPosition).Magnitude
+            if moved > CONFIG.STUCK_THRESHOLD then
+                lastMoveTime = tick()
+                lastPosition = currentPos
+            else
+                if tick() - lastMoveTime >= CONFIG.STUCK_TIME then
+                    if riverPosition then
+                        statusLabel.Text = "🔄 Atascado, volviendo al río..."
+                        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+                        teleportTo(riverPosition)
+                        lastMoveTime = tick()
+                        lastPosition = riverPosition
+                        task.wait(0.5)
+                    end
+                end
+            end
+        else
+            lastPosition = currentPos
+        end
+
+        local eggs = findEggs()
+
+        if #eggs == 0 then
+            if not waiting then
+                waiting = true
+                statusLabel.Text = "⏳ Sin huevos, esperando..."
+                statusLabel.TextColor3 = Color3.fromRGB(255, 165, 0)
+            end
+            task.wait(CONFIG.SCAN_INTERVAL)
+        else
+            waiting = false
+            statusLabel.Text = "✅ Farmeando... (" .. #eggs .. " huevos)"
+            statusLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
+
+            for _, eggData in ipairs(eggs) do
+                if not farmActive then break end
+                teleportTo(eggData.position)
+                lastMoveTime = tick()
+                lastPosition = eggData.position
+                eggCount = eggCount + 1
+                eggCounter.Text = "🥚 Huevos: " .. eggCount
+                task.wait(CONFIG.TELEPORT_DELAY)
+            end
+
+            task.wait(CONFIG.AUTO_RESPAWN_CHECK)
+        end
+    end)
+end
+
+-- ══════════════════════════════════════
+--              INICIO
+-- ══════════════════════════════════════
+local ScreenGui, StatusLabel, EggCounter, StartBtn, SetPosBtn = createGUI()
+
+player.CharacterAdded:Connect(function(newChar)
+    character = newChar
+    rootPart = newChar:WaitForChild("HumanoidRootPart")
+end)
+
+-- Set Position
+SetPosBtn.MouseButton1Click:Connect(function()
+    character = player.Character
+    if character then
+        rootPart = character:FindFirstChild("HumanoidRootPart")
+        if rootPart then
+            riverPosition = rootPart.Position
+            SetPosBtn.Text = "📍 Set Position ✅"
+            StatusLabel.Text = "📍 Posición guardada!"
+            StatusLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
+            task.delay(2, function()
+                if not farmActive then
+                    StatusLabel.Text = "⬛ Estado: Inactivo"
+                    StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+                end
+            end)
+        end
+    end
+end)
+
+-- ✅ Start Farm — verde al activar, morado al desactivar
+StartBtn.MouseButton1Click:Connect(function()
+    farmActive = not farmActive
+
+    if farmActive then
+        -- ✅ Ponerse VERDE
+        TweenService:Create(StartBtn, TweenInfo.new(0.15, Enum.EasingStyle.Quad),
+            {BackgroundColor3 = Color3.fromRGB(40, 160, 40)}):Play()
+        StartBtn.Text = "⏹ Stop Farm"
+        eggCount = 0
+
+        -- Teletransportarse a Set Position
+        if riverPosition then
+            StatusLabel.Text = "🌊 Yendo al río..."
+            StatusLabel.TextColor3 = Color3.fromRGB(100, 180, 255)
+            teleportTo(riverPosition)
+        end
+
+        -- Esperar 3s para equipar la dona
+        StatusLabel.Text = "⏳ Equipando dona... (3s)"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
+        task.wait(3)
+
+        StatusLabel.Text = "🔍 Buscando Candy Eggs..."
+        StatusLabel.TextColor3 = Color3.fromRGB(80, 255, 80)
+        startFarm(StatusLabel, EggCounter)
+    else
+        -- ✅ Volver a MORADO
+        TweenService:Create(StartBtn, TweenInfo.new(0.15, Enum.EasingStyle.Quad),
+            {BackgroundColor3 = Color3.fromRGB(100, 30, 160)}):Play()
+        StartBtn.Text = "🚀 Start Farm"
+        StatusLabel.Text = "⬛ Estado: Inactivo"
+        StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+
+        if farmConnection then
+            farmConnection:Disconnect()
+            farmConnection = nil
+        end
+    end
+end)
+
+print("[CocoaFloatFarm] Script cargado correctamente ✅")
