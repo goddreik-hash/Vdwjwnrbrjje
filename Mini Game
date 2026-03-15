@@ -78,7 +78,7 @@ local function createGUI()
     Title.Size = UDim2.new(1, 0, 0, 28)
     Title.BackgroundColor3 = Color3.fromRGB(139, 69, 19)
     Title.BorderSizePixel = 0
-    Title.Text = "🍫 Cocoa Float Farm"
+    Title.Text = "🍫 Gigi Float Farm"
     Title.TextColor3 = Color3.fromRGB(255, 220, 150)
     Title.TextSize = 13
     Title.Font = Enum.Font.GothamBold
